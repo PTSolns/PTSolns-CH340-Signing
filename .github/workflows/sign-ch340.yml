@@ -15,16 +15,19 @@ permissions:
 
 jobs:
   sign:
-    name: Sign ch340.exe
     runs-on: windows-2022
     environment: production
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Ensure input exists
+      - name: Show inputs (safe)
         shell: pwsh
         run: |
+          Write-Host "Endpoint: ${{ vars.TRUSTED_SIGNING_ENDPOINT }}"
+          Write-Host "Account:  ${{ vars.TRUSTED_SIGNING_ACCOUNT_NAME }}"
+          Write-Host "Profile:  ${{ vars.CERTIFICATE_PROFILE_NAME }}"
           $p = Join-Path $env:GITHUB_WORKSPACE "ch340\ch340.exe"
           if (-not (Test-Path $p)) { throw "Missing file: $p" }
           Get-Item $p | Format-List Name,Length,FullName
@@ -47,13 +50,6 @@ jobs:
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
-          exclude-environment-credential: true
-          exclude-azure-cli-credential: true
-          exclude-azure-powershell-credential: true
-          exclude-visual-studio-credential: true
-          exclude-visual-studio-code-credential: true
-          exclude-shared-token-cache-credential: true
-          exclude-interactive-browser-credential: true
 
       - name: Verify signature
         shell: pwsh
