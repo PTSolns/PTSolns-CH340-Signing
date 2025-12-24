@@ -1,0 +1,71 @@
+name: Sign CH340 EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ch340/**"
+      - ".github/workflows/sign-ch340.yml"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  sign:
+    name: Sign ch340.exe
+    runs-on: windows-2022
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure input exists
+        shell: pwsh
+        run: |
+          $p = Join-Path $env:GITHUB_WORKSPACE "ch340\ch340.exe"
+          if (-not (Test-Path $p)) { throw "Missing file: $p" }
+          Get-Item $p | Format-List Name,Length,FullName
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          audience: api://AzureADTokenExchange
+
+      - name: Sign with Trusted Signing
+        uses: azure/trusted-signing-action@v0
+        with:
+          endpoint: ${{ vars.TRUSTED_SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ vars.TRUSTED_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ vars.CERTIFICATE_PROFILE_NAME }}
+          files: ${{ github.workspace }}\ch340\ch340.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          exclude-environment-credential: true
+          exclude-azure-cli-credential: true
+          exclude-azure-powershell-credential: true
+          exclude-visual-studio-credential: true
+          exclude-visual-studio-code-credential: true
+          exclude-shared-token-cache-credential: true
+          exclude-interactive-browser-credential: true
+
+      - name: Verify signature
+        shell: pwsh
+        run: |
+          $p = Join-Path $env:GITHUB_WORKSPACE "ch340\ch340.exe"
+          $sig = Get-AuthenticodeSignature $p
+          $sig | Format-List Status,StatusMessage,SignerCertificate,TimeStamperCertificate
+          if ($sig.Status -ne "Valid") { throw "Signature is not valid: $($sig.Status) - $($sig.StatusMessage)" }
+
+      - name: Upload signed EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: ch340-signed
+          path: ch340/ch340.exe
+          if-no-files-found: error
